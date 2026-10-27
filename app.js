@@ -228,9 +228,9 @@ function demoBoard() {
     team: { id: "demo", key: "PO", name: "Product Owner" },
     states: Object.values(S),
     issues: [
-      issue(41, "Skriv sammanfattning av kundintervjuerna", S.progress, { created: 6, started: 2, desc: "Påhittat exempel." }),
+      issue(41, "Skriv sammanfattning av kundintervjuerna", S.progress, { created: 6, started: 2, desc: "Intervjuerna med **fem kunder** är klara, materialet ligger i [Notion](https://notion.so).\n\n- [x] transkribera\n- [ ] skriva ihop\n- [ ] skicka till teamet\n\nDone when: dokumentet är delat." }),
       issue(38, "Granska förslaget till ny prismodell", S.review, { created: 9, started: 1, desc: "Påhittat exempel.", project: "Exempelprojekt" }),
-      issue(44, "Prata med Alex om releaseplanen", S.todo, { created: 3, desc: "Påhittat exempel." }),
+      issue(44, "Prata med Alex om releaseplanen", S.todo, { created: 3, desc: "Alex tog upp det på standup i måndags. Vi behöver ett datum innan vi lovar kunden något, och det hänger på om testmiljön är uppe i tid." }),
       issue(40, "Uppdatera roadmapen för nästa kvartal", S.todo, { created: 11 }),
       issue(36, "Svara på offertförfrågan från Exempel AB", S.todo, { created: 17, desc: "Done when: offerten är skickad." }),
       issue(24, "Följ upp leverantörsavtalet", S.todo, { created: 19 }),
@@ -354,6 +354,22 @@ const dueFmt = new Intl.DateTimeFormat("sv-SE", { day: "numeric", month: "short"
 /** @param {string} s */
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** Markdown to readable plain text. Enough for a preview, not a renderer. @param {string} md */
+function plainText(md) {
+  return md
+    .replace(/```\w*\n?/g, "")                                   // code fences
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")                      // images → alt
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")                       // links → text
+    .replace(/^#{1,6}\s+/gm, "")                                  // headings
+    .replace(/^\s*-{3,}\s*$/gm, "")                               // rules
+    .replace(/^\s*[-*+]\s+\[([ xX])\]\s+/gm, (_, c) => (c.trim() ? "☑ " : "☐ ")) // checkboxes
+    .replace(/^\s*[-*+]\s+/gm, "• ")                              // bullets
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")                            // bold
+    .replace(/`([^`]+)`/g, "$1")                                  // inline code
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // ---------- app state ----------
 
 /** @type {{ board: Board | null, fetchedAt: number | null, fetching: boolean, error: string | null }} */
@@ -440,8 +456,15 @@ function renderRow({ issue, age, stale }) {
     .map((action) =>
       el("button", { type: "button", class: `act act-${action}`, onclick: () => perform(issue, action) }, [ACTIONS[action].label]),
     ));
+  const text = noContext ? "" : plainText(/** @type {string} */ (issue.description));
   return el("li", { class: `issue${stale ? " is-stale" : ""}`, "data-id": issue.id }, [
     el("a", { class: "title", href: issue.url, target: "_blank", rel: "noopener" }, [issue.title]),
+    text
+      ? el("p", {
+        class: "desc", title: "Klicka för att fälla ut",
+        onclick: (e) => { /** @type {HTMLElement} */ (e.currentTarget).classList.toggle("open"); },
+      }, [text])
+      : null,
     meta,
     actions,
   ]);
