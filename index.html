@@ -53,14 +53,7 @@
     </section>
 
     <div id="board" hidden>
-      <section class="group">
-        <h2 class="label">Pågår</h2>
-        <ul id="progress-list" class="issues"></ul>
-      </section>
-      <section class="group">
-        <h2 class="label">Veckan <span id="todo-count" class="count"></span></h2>
-        <ul id="todo-list" class="issues"></ul>
-      </section>
+      <div id="groups"></div>
       <footer class="foot">
         <p id="summary" class="summary"></p>
         <p id="status" class="status"></p>
@@ -95,10 +88,8 @@
       <label>Sammanhang
         <textarea id="new-desc" rows="3" placeholder="Vem bad om det, varför, och vad som gör den klar."></textarea>
       </label>
-      <fieldset class="choice">
+      <fieldset id="new-states" class="choice">
         <legend>Status</legend>
-        <label><input type="radio" name="new-state" value="backlog" checked> Backlog</label>
-        <label><input type="radio" name="new-state" value="todo"> Veckan</label>
       </fieldset>
       <p id="create-error" class="muted small" role="status"></p>
       <div class="row">

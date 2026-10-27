@@ -1,8 +1,9 @@
 # Idag
 
 A start page over my Linear backlog (team PO). Static HTML, no build step, served from GitHub Pages.
-Shows what is in progress, this week's Todo (oldest first, with age in days) and how much is waiting
-in Backlog. Each row can be moved to Done, Backlog or Canceled straight from the page, with undo.
+Shows every open issue in the team, grouped by workflow state (In Progress first, then Todo, then
+Backlog), oldest first with age in days. Each row can be moved to Done, Backlog or Canceled straight
+from the page, with undo.
 
 The page talks to Linear's GraphQL API directly from the browser with a personal API key.
 The key lives in `localStorage` only. Nothing is stored in this repo.
@@ -16,13 +17,11 @@ The key lives in `localStorage` only. Nothing is stored in this repo.
    New tabs now open the page. If the URL changes, edit `extension/newtab.js`.
 4. iPhone: open the URL in Safari → Share → Add to Home Screen.
 
-## Rules the page encodes
+## What it marks
 
-- Todo is a promise: more than 7 turns the counter red.
-- Stale: Todo older than 14 days, In Progress older than 7.
-- More than 5 stale: "dags för veckorensningen".
+- Stale: In Progress older than 7 days, Todo older than 14.
 - Empty description: "saknar kontext".
-- "Skapa ny" (or `c`) creates an issue in the team; a line of context is required, state defaults to Backlog.
+- "Skapa ny" (or `c`) creates an issue in the team; a line of context is required, state defaults to Todo.
 
 ## Development
 

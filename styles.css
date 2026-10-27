@@ -64,7 +64,6 @@ main { padding: 24px 0 64px; }
   font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
 }
 .count { font-weight: 500; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; color: var(--faint); }
-.count.over { color: var(--accent); }
 
 .issues { list-style: none; margin: 0; padding: 0; }
 .issue {
@@ -82,6 +81,7 @@ main { padding: 24px 0 64px; }
 .age.stale { background: var(--amber-bg); color: var(--amber); }
 .nocontext { color: var(--amber); }
 .empty { padding: 13px 0; color: var(--faint); border-bottom: 1px solid var(--line); }
+p.empty { border: 0; margin: 28px 0 0; }
 
 .actions { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 6px; opacity: 0; transition: opacity .12s ease; }
 .issue:hover .actions, .issue:focus-within .actions { opacity: 1; }

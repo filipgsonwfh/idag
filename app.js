@@ -9,10 +9,8 @@
 
 const API = "https://api.linear.app/graphql";
 const STORAGE_PREFIX = "idag:";
-const TODO_LIMIT = 7;            // Todo is a promise: at most seven this week
 const STALE_TODO_DAYS = 14;      // Todo older than this is stale
 const STALE_PROGRESS_DAYS = 7;   // In Progress older than this is stale
-const CLEAROUT_THRESHOLD = 5;    // more stale than this: time for the weekly clear-out
 const REFRESH_AFTER_MS = 60_000; // refetch on focus if the cache is older than this
 const UNDO_MS = 6_000;
 const DAY_MS = 86_400_000;
@@ -262,27 +260,37 @@ function demoIssue(title, description, state) {
 /** @param {string} iso @param {number} now */
 const daysSince = (iso, now) => Math.max(0, Math.floor((now - Date.parse(iso)) / DAY_MS));
 
-/** @param {Board} board @param {number} now */
+/** Open state types, in the order the groups are shown. */
+const OPEN_TYPES = ["started", "unstarted", "triage", "backlog"];
+
+/** @param {Issue} i @param {number} now @returns {Row} */
+function toRow(i, now) {
+  const type = i.state.type;
+  const age = daysSince(type === "started" && i.startedAt ? i.startedAt : i.createdAt, now);
+  const stale = type === "started" ? age > STALE_PROGRESS_DAYS : type === "unstarted" ? age > STALE_TODO_DAYS : false;
+  return { issue: i, age, stale };
+}
+
+/** @typedef {{ state: State, rows: Row[] }} Group */
+
+/** Every open issue, grouped by workflow state. @param {Board} board @param {number} now */
 function derive(board, now) {
-  /** @type {Row[]} */
-  const progress = board.issues
-    .filter((i) => i.state.type === "started")
-    .map((i) => {
-      const age = daysSince(i.startedAt ?? i.createdAt, now);
-      return { issue: i, age, stale: age > STALE_PROGRESS_DAYS };
-    })
-    .sort((a, b) => b.age - a.age);
-  /** @type {Row[]} */
-  const todo = board.issues
-    .filter((i) => i.state.type === "unstarted")
-    .map((i) => {
-      const age = daysSince(i.createdAt, now);
-      return { issue: i, age, stale: age > STALE_TODO_DAYS };
-    })
-    .sort((a, b) => b.age - a.age);
-  const backlogCount = board.issues.filter((i) => i.state.type === "backlog").length;
-  const stale = progress.filter((r) => r.stale).length + todo.filter((r) => r.stale).length;
-  return { progress, todo, backlogCount, stale };
+  const states = board.states
+    .filter((s) => OPEN_TYPES.includes(s.type))
+    .sort((a, b) => OPEN_TYPES.indexOf(a.type) - OPEN_TYPES.indexOf(b.type) || a.position - b.position);
+  /** @type {Group[]} */
+  const groups = states
+    .map((state) => ({
+      state,
+      rows: board.issues
+        .filter((i) => i.state.id === state.id)
+        .map((i) => toRow(i, now))
+        .sort((a, b) => b.age - a.age),
+    }))
+    .filter((g) => g.rows.length > 0);
+  const open = groups.reduce((n, g) => n + g.rows.length, 0);
+  const stale = groups.reduce((n, g) => n + g.rows.filter((r) => r.stale).length, 0);
+  return { groups, open, stale };
 }
 
 /** @param {State[]} states @param {string} type @param {string} preferName */
@@ -375,50 +383,41 @@ function render() {
   if (!connected) return;
   if (!app.board) { renderStatus(); return; }
 
-  const { progress, todo, backlogCount, stale } = derive(app.board, Date.now());
+  const { groups, open, stale } = derive(app.board, Date.now());
 
-  renderList($("progress-list"), progress, "Inget pågår.");
-  renderList($("todo-list"), todo, "Inga löften den här veckan.");
-
-  const counter = $("todo-count");
-  counter.textContent = `${todo.length}/${TODO_LIMIT}`;
-  counter.classList.toggle("over", todo.length > TODO_LIMIT);
-  counter.title = todo.length > TODO_LIMIT
-    ? `Fler än ${TODO_LIMIT} i Todo. Vilken ska tillbaka till Backlog?`
-    : "Todo är veckans löften. Max sju.";
+  $("groups").replaceChildren(...(open
+    ? groups.map((g) =>
+      el("section", { class: "group" }, [
+        el("h2", { class: "label" }, [g.state.name, el("span", { class: "count" }, [String(g.rows.length)])]),
+        el("ul", { class: "issues" }, g.rows.map(renderRow)),
+      ]))
+    : [el("p", { class: "empty" }, [`Inget öppet i ${app.board.team.name}.`])]));
 
   $("summary").replaceChildren(...compact([
-    el("span", {}, [`${backlogCount} i Backlog`]),
+    el("span", {}, [`${open} öppna`]),
     el("span", { class: "sep" }, ["·"]),
     el("span", { class: stale ? "stale" : "" }, [`${stale} stale`]),
-    stale > CLEAROUT_THRESHOLD ? el("span", { class: "sep" }, ["·"]) : null,
-    stale > CLEAROUT_THRESHOLD ? el("span", { class: "nag" }, ["dags för veckorensningen"]) : null,
   ]));
   renderStatus();
-}
-
-/** @param {HTMLElement} list @param {Row[]} rows @param {string} empty */
-function renderList(list, rows, empty) {
-  list.replaceChildren(...(rows.length ? rows.map(renderRow) : [el("li", { class: "empty" }, [empty])]));
 }
 
 /** @param {Row} row */
 function renderRow({ issue, age, stale }) {
   const noContext = !issue.description || !issue.description.trim();
-  const showState = issue.state.type === "started" && issue.state.name !== "In Progress";
   const meta = el("div", { class: "meta" }, [
     el("span", { class: "id" }, [issue.identifier]),
     el("span", { class: `age${stale ? " stale" : ""}`, title: stale ? "Stale" : "Ålder" }, [`${age} d`]),
-    showState ? el("span", { class: "state" }, [issue.state.name]) : null,
     issue.project ? el("span", { class: "project" }, [issue.project.name]) : null,
     issue.dueDate ? el("span", { class: "due" }, [`förfaller ${dueFmt.format(new Date(issue.dueDate))}`]) : null,
     noContext
       ? el("span", { class: "nocontext", title: "Beskrivningen är tom. Skriv varför, och vad som gör den klar." }, ["saknar kontext"])
       : null,
   ]);
-  const actions = el("div", { class: "actions" }, /** @type {Action[]} */ (Object.keys(ACTIONS)).map((action) =>
-    el("button", { type: "button", class: `act act-${action}`, onclick: () => perform(issue, action) }, [ACTIONS[action].label]),
-  ));
+  const actions = el("div", { class: "actions" }, /** @type {Action[]} */ (Object.keys(ACTIONS))
+    .filter((action) => ACTIONS[action].type !== issue.state.type) // no button for the state it is already in
+    .map((action) =>
+      el("button", { type: "button", class: `act act-${action}`, onclick: () => perform(issue, action) }, [ACTIONS[action].label]),
+    ));
   return el("li", { class: `issue${stale ? " is-stale" : ""}`, "data-id": issue.id }, [
     el("a", { class: "title", href: issue.url, target: "_blank", rel: "noopener" }, [issue.title]),
     meta,
@@ -574,10 +573,19 @@ function openCreate() {
   if (!app.board) { showToast("Teamet är inte hämtat än."); return; }
   input("new-title").value = "";
   /** @type {HTMLTextAreaElement} */ ($("new-desc")).value = "";
-  const todoCount = derive(app.board, Date.now()).todo.length;
-  $("create-error").textContent = todoCount >= TODO_LIMIT
-    ? `Veckan är full (${todoCount}/${TODO_LIMIT}). Ska den här in får något annat gå tillbaka.`
-    : "";
+  // One radio per Backlog/Todo-type state in the team, Todo preselected.
+  const choices = app.board.states
+    .filter((s) => s.type === "backlog" || s.type === "unstarted")
+    .sort((a, b) => a.position - b.position);
+  const preferred = choices.find((s) => s.type === "unstarted") ?? choices[0];
+  $("new-states").replaceChildren(
+    el("legend", {}, ["Status"]),
+    ...choices.map((s) => el("label", {}, [
+      el("input", { type: "radio", name: "new-state", value: s.id, checked: s === preferred }),
+      ` ${s.name}`,
+    ])),
+  );
+  $("create-error").textContent = "";
   createDialog().showModal();
   input("new-title").focus();
 }
@@ -589,20 +597,18 @@ async function submitCreate(e) {
   const title = input("new-title").value.trim();
   const description = /** @type {HTMLTextAreaElement} */ ($("new-desc")).value.trim();
   const checked = /** @type {HTMLInputElement | null} */ (document.querySelector('input[name="new-state"]:checked'));
-  const thisWeek = checked?.value === "todo";
+  const stateId = checked?.value || undefined;
+  const state = app.board.states.find((s) => s.id === stateId) ?? null;
   const err = $("create-error");
   if (!title) { err.textContent = "Skriv en titel."; return; }
   if (!description) { err.textContent = "Skriv en rad sammanhang. Utan den säger titeln inget om tre veckor."; return; }
-  const state = thisWeek
-    ? targetState(app.board.states, "unstarted", "Todo")
-    : targetState(app.board.states, "backlog", "Backlog");
   const save = /** @type {HTMLButtonElement} */ ($("create-save"));
   save.disabled = true;
   err.textContent = "Skapar…";
   try {
     const issue = DEMO
       ? demoIssue(title, description, state)
-      : await createIssue(settings.key, { teamId: app.board.team.id, title, description, stateId: state?.id });
+      : await createIssue(settings.key, { teamId: app.board.team.id, title, description, stateId });
     app.board.issues.push(issue);
     saveCache();
     createDialog().close();
