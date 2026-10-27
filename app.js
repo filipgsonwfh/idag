@@ -9,6 +9,7 @@
 
 const API = "https://api.linear.app/graphql";
 const STORAGE_PREFIX = "idag:";
+const CACHE_VERSION = 2;         // bump when the Board shape changes, so old cached copies are dropped
 const STALE_TODO_DAYS = 14;      // Todo older than this is stale
 const STALE_PROGRESS_DAYS = 7;   // In Progress older than this is stale
 const REFRESH_AFTER_MS = 60_000; // refetch on focus if the cache is older than this
@@ -147,6 +148,13 @@ function isState(v) {
 function isProject(v) {
   const p = /** @type {any} */ (v);
   return !!p && typeof p.id === "string" && typeof p.name === "string";
+}
+
+/** @param {unknown} v @returns {v is Board} */
+function isBoard(v) {
+  const b = /** @type {any} */ (v);
+  return !!b && !!b.team && typeof b.team.id === "string" && typeof b.team.name === "string"
+    && Array.isArray(b.states) && Array.isArray(b.projects) && Array.isArray(b.issues);
 }
 
 /** @param {unknown} v @returns {v is Issue} */
@@ -414,18 +422,18 @@ function loadCache() {
   if (!raw) return;
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.at === "number" && parsed.board && Array.isArray(parsed.board.issues)) {
+    if (parsed?.v === CACHE_VERSION && typeof parsed.at === "number" && isBoard(parsed.board)) {
       app.board = parsed.board;
       app.fetchedAt = parsed.at;
+      return;
     }
-  } catch {
-    store.del("cache");
-  }
+  } catch { /* broken JSON: drop it below */ }
+  store.del("cache"); // older shape or unreadable
 }
 
 function saveCache() {
   if (DEMO) return;
-  if (app.board && app.fetchedAt) store.set("cache", JSON.stringify({ at: app.fetchedAt, board: app.board }));
+  if (app.board && app.fetchedAt) store.set("cache", JSON.stringify({ v: CACHE_VERSION, at: app.fetchedAt, board: app.board }));
 }
 
 // ---------- rendering ----------
@@ -438,7 +446,14 @@ function render() {
   $("create-btn").hidden = !connected;
   $("scope").textContent = connected && app.board ? viewLabel(app.board, settings.view) : "";
   if (!connected) return;
-  if (!app.board) { renderStatus(); return; }
+  if (!app.board) {
+    // Nothing to show yet: say so where the list would be, in red if it is an error.
+    $("groups").replaceChildren(app.error
+      ? el("p", { class: "empty error" }, [app.error])
+      : el("p", { class: "empty" }, ["Hämtar från Linear…"]));
+    renderStatus();
+    return;
+  }
   renderedBoard = JSON.stringify(app.board);
 
   const { groups, open, stale } = derive(app.board, Date.now());
@@ -750,6 +765,8 @@ async function submitCreate(e) {
 // ---------- init ----------
 
 function init() {
+  // A script error must not leave a silent blank page: show it in the status line.
+  window.addEventListener("error", (e) => { app.error = `Fel i sidan: ${e.message}`; renderStatus(); });
   loadCache();
   render();
   $("settings-btn").addEventListener("click", openSettings);

@@ -89,6 +89,7 @@ main { padding: 24px 0 64px; }
 .nocontext { color: var(--amber); }
 .empty { padding: 13px 0; color: var(--faint); border-bottom: 1px solid var(--line); }
 p.empty { border: 0; margin: 28px 0 0; }
+p.empty.error { color: var(--accent); }
 
 .actions { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 6px; opacity: 0; transition: opacity .12s ease; }
 .issue:hover .actions, .issue:focus-within .actions { opacity: 1; }
