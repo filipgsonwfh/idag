@@ -22,6 +22,12 @@
   <header class="top">
     <h1 id="date">&nbsp;</h1>
     <div class="tools">
+      <button id="create-btn" type="button" class="icon new" hidden title="Skapa ny task (c)" aria-label="Skapa ny task">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>Skapa ny</span>
+      </button>
       <button id="refresh-btn" type="button" class="icon" title="Hämta igen" aria-label="Hämta igen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/>
@@ -76,6 +82,28 @@
         <button id="save-btn" type="submit" class="primary">Spara</button>
         <button id="cancel-btn" type="button" class="ghost">Avbryt</button>
         <button id="forget-btn" type="button" class="ghost danger">Ta bort nyckel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="create">
+    <form id="create-form" novalidate>
+      <h2>Ny task</h2>
+      <label>Titel
+        <input id="new-title" type="text" autocomplete="off" maxlength="200" placeholder="Imperativ och specifik, med namn om någon är inblandad">
+      </label>
+      <label>Sammanhang
+        <textarea id="new-desc" rows="3" placeholder="Vem bad om det, varför, och vad som gör den klar."></textarea>
+      </label>
+      <fieldset class="choice">
+        <legend>Status</legend>
+        <label><input type="radio" name="new-state" value="backlog" checked> Backlog</label>
+        <label><input type="radio" name="new-state" value="todo"> Veckan</label>
+      </fieldset>
+      <p id="create-error" class="muted small" role="status"></p>
+      <div class="row">
+        <button id="create-save" type="submit" class="primary">Skapa</button>
+        <button id="create-cancel" type="button" class="ghost">Avbryt</button>
       </div>
     </form>
   </dialog>

@@ -70,6 +70,19 @@ const MOVE_MUTATION = `
   }
 `;
 
+const CREATE_MUTATION = `
+  mutation Create($input: IssueCreateInput!) {
+    issueCreate(input: $input) {
+      success
+      issue {
+        id identifier title description url createdAt startedAt dueDate
+        state { id name type position }
+        project { name }
+      }
+    }
+  }
+`;
+
 const VIEWER_QUERY = `query { viewer { id name displayName } }`;
 
 class LinearError extends Error {
@@ -167,6 +180,18 @@ async function moveIssue(key, issueId, stateId) {
   if (!data?.issueUpdate?.success) throw new LinearError("Linear sparade inte ändringen.", "graphql");
 }
 
+/**
+ * @param {string} key
+ * @param {{ teamId: string, title: string, description: string, stateId?: string }} input
+ * @returns {Promise<Issue>}
+ */
+async function createIssue(key, input) {
+  const data = await gql(key, CREATE_MUTATION, { input });
+  const issue = data?.issueCreate?.issue;
+  if (!data?.issueCreate?.success || !isIssue(issue)) throw new LinearError("Linear skapade inte tasken.", "graphql");
+  return normalizeIssue(issue);
+}
+
 /** @param {string} key @returns {Promise<string>} the viewer's display name */
 async function whoAmI(key) {
   const data = await gql(key, VIEWER_QUERY);
@@ -217,6 +242,18 @@ function demoBoard() {
       issue(12, "Skriv onboarding-guide för nya kollegor", S.backlog, { created: 95 }),
       issue(9, "Se över mallarna för statusrapporter", S.backlog, { created: 120 }),
     ],
+  };
+}
+
+let demoCounter = 100;
+
+/** @param {string} title @param {string} description @param {State | null} state @returns {Issue} */
+function demoIssue(title, description, state) {
+  const n = ++demoCounter;
+  return {
+    id: `demo-${n}`, identifier: `PO-${n}`, title, description, url: "https://linear.app",
+    createdAt: new Date().toISOString(), startedAt: null, dueDate: null, project: null,
+    state: state ?? { id: "s-backlog", name: "Backlog", type: "backlog", position: 0 },
   };
 }
 
@@ -308,6 +345,7 @@ const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const app = { board: null, fetchedAt: null, fetching: false, error: null };
 
 function loadCache() {
+  if (DEMO) return; // demo never touches the real cache
   const raw = store.get("cache");
   if (!raw) return;
   try {
@@ -322,6 +360,7 @@ function loadCache() {
 }
 
 function saveCache() {
+  if (DEMO) return;
   if (app.board && app.fetchedAt) store.set("cache", JSON.stringify({ at: app.fetchedAt, board: app.board }));
 }
 
@@ -332,6 +371,7 @@ function render() {
   const connected = DEMO || !!settings.key;
   $("setup").hidden = connected;
   $("board").hidden = !connected;
+  $("create-btn").hidden = !connected;
   if (!connected) return;
   if (!app.board) { renderStatus(); return; }
 
@@ -526,6 +566,55 @@ function forget() {
   render();
 }
 
+// ---------- create ----------
+
+const createDialog = () => /** @type {HTMLDialogElement} */ ($("create"));
+
+function openCreate() {
+  if (!app.board) { showToast("Teamet är inte hämtat än."); return; }
+  input("new-title").value = "";
+  /** @type {HTMLTextAreaElement} */ ($("new-desc")).value = "";
+  const todoCount = derive(app.board, Date.now()).todo.length;
+  $("create-error").textContent = todoCount >= TODO_LIMIT
+    ? `Veckan är full (${todoCount}/${TODO_LIMIT}). Ska den här in får något annat gå tillbaka.`
+    : "";
+  createDialog().showModal();
+  input("new-title").focus();
+}
+
+/** @param {SubmitEvent} e */
+async function submitCreate(e) {
+  e.preventDefault();
+  if (!app.board) return;
+  const title = input("new-title").value.trim();
+  const description = /** @type {HTMLTextAreaElement} */ ($("new-desc")).value.trim();
+  const checked = /** @type {HTMLInputElement | null} */ (document.querySelector('input[name="new-state"]:checked'));
+  const thisWeek = checked?.value === "todo";
+  const err = $("create-error");
+  if (!title) { err.textContent = "Skriv en titel."; return; }
+  if (!description) { err.textContent = "Skriv en rad sammanhang. Utan den säger titeln inget om tre veckor."; return; }
+  const state = thisWeek
+    ? targetState(app.board.states, "unstarted", "Todo")
+    : targetState(app.board.states, "backlog", "Backlog");
+  const save = /** @type {HTMLButtonElement} */ ($("create-save"));
+  save.disabled = true;
+  err.textContent = "Skapar…";
+  try {
+    const issue = DEMO
+      ? demoIssue(title, description, state)
+      : await createIssue(settings.key, { teamId: app.board.team.id, title, description, stateId: state?.id });
+    app.board.issues.push(issue);
+    saveCache();
+    createDialog().close();
+    render();
+    showToast(`${issue.identifier} skapad i ${issue.state.name}.`);
+  } catch (e2) {
+    err.textContent = e2 instanceof LinearError ? e2.message : "Något gick fel.";
+  } finally {
+    save.disabled = false;
+  }
+}
+
 // ---------- init ----------
 
 function init() {
@@ -537,6 +626,18 @@ function init() {
   $("forget-btn").addEventListener("click", forget);
   $("refresh-btn").addEventListener("click", () => refresh({ force: true }));
   $("settings-form").addEventListener("submit", saveSettings);
+  $("create-btn").addEventListener("click", openCreate);
+  $("create-cancel").addEventListener("click", () => createDialog().close());
+  $("create-form").addEventListener("submit", submitCreate);
+  // "c" opens the create dialog, like in Linear. Not while typing or with a dialog open.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "c" || e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = /** @type {HTMLElement | null} */ (e.target);
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    if (document.querySelector("dialog[open]") || $("create-btn").hidden) return;
+    e.preventDefault();
+    openCreate();
+  });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(); });
   window.addEventListener("focus", () => refresh());
   refresh();

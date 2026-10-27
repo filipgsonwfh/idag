@@ -22,6 +22,7 @@ The key lives in `localStorage` only. Nothing is stored in this repo.
 - Stale: Todo older than 14 days, In Progress older than 7.
 - More than 5 stale: "dags för veckorensningen".
 - Empty description: "saknar kontext".
+- "Skapa ny" (or `c`) creates an issue in the team; a line of context is required, state defaults to Backlog.
 
 ## Development
 

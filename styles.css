@@ -50,6 +50,12 @@ h1 { font-size: clamp(26px, 3.4vw, 34px); font-weight: 600; letter-spacing: -0.0
 .icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); }
 .icon:hover { color: var(--ink); background: var(--pill); }
 .icon svg { width: 18px; height: 18px; }
+.new { width: auto; padding: 0 12px 0 9px; margin-right: 6px; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; white-space: nowrap; border: 1px solid var(--line); }
+.new:hover { background: none; border-color: var(--muted); }
+@media (max-width: 480px) {
+  .new { width: 36px; padding: 0; justify-content: center; }
+  .new span { display: none; }
+}
 
 main { padding: 24px 0 64px; }
 .group { margin-top: 30px; }
@@ -83,7 +89,7 @@ main { padding: 24px 0 64px; }
 .act:hover { color: var(--ink); border-color: var(--muted); }
 .act-done:hover { color: var(--green); border-color: var(--green); }
 .act-cancel:hover { color: var(--accent); border-color: var(--accent); }
-@media (hover: none) {
+@media (hover: none), (max-width: 480px) {
   .actions { grid-column: 1 / -1; grid-row: 3; margin-top: 6px; opacity: 1; }
   .act { padding: 7px 12px; font-size: 13px; }
 }
@@ -119,7 +125,16 @@ dialog input {
   display: block; width: 100%; margin-top: 4px; font: 16px/1.3 var(--font); color: var(--ink);
   background: transparent; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px;
 }
-dialog input:focus { outline: 2px solid var(--ink); outline-offset: -1px; border-color: transparent; }
+dialog input:focus, dialog textarea:focus { outline: 2px solid var(--ink); outline-offset: -1px; border-color: transparent; }
+dialog textarea {
+  display: block; width: 100%; margin-top: 4px; font: 16px/1.4 var(--font); color: var(--ink);
+  background: transparent; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; resize: vertical;
+}
+.choice { border: 0; padding: 0; margin: 0 0 12px; }
+.choice legend { font-size: 13px; color: var(--muted); padding: 0; margin-bottom: 6px; }
+.choice div, .choice { display: block; }
+.choice label { display: inline-flex; align-items: center; gap: 6px; margin: 0 18px 0 0; font-size: 15px; color: var(--ink); }
+.choice input { accent-color: var(--ink); margin: 0; width: auto; }
 
 .toast {
   position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%);
