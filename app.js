@@ -352,6 +352,9 @@ const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 /** @type {{ board: Board | null, fetchedAt: number | null, fetching: boolean, error: string | null }} */
 const app = { board: null, fetchedAt: null, fetching: false, error: null };
 
+/** Serialized board as last rendered, so a refresh that changed nothing leaves the DOM (and scroll) alone. */
+let renderedBoard = "";
+
 function loadCache() {
   if (DEMO) return; // demo never touches the real cache
   const raw = store.get("cache");
@@ -382,6 +385,7 @@ function render() {
   $("create-btn").hidden = !connected;
   if (!connected) return;
   if (!app.board) { renderStatus(); return; }
+  renderedBoard = JSON.stringify(app.board);
 
   const { groups, open, stale } = derive(app.board, Date.now());
 
@@ -456,7 +460,8 @@ async function refresh({ force = false } = {}) {
     app.error = e instanceof LinearError ? e.message : "Något gick fel.";
   } finally {
     app.fetching = false;
-    render();
+    if (JSON.stringify(app.board) !== renderedBoard) render();
+    else renderStatus();
   }
 }
 
