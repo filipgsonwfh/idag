@@ -23,6 +23,12 @@ The key lives in `localStorage` only. Nothing is stored in this repo.
 - Empty description: "saknar kontext".
 - "Skapa ny" (or `c`) creates an issue in the team; a line of context is required, state defaults to Todo.
 
+## Deploying
+
+GitHub Pages caches files for ten minutes, so a new `index.html` can meet an old `app.js` in the
+browser. The asset links in `index.html` carry a `?v=N` query string: bump it whenever `app.js` or
+`styles.css` change.
+
 ## Development
 
 ```sh
