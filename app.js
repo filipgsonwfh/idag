@@ -18,6 +18,9 @@ const DAY_MS = 86_400_000;
 
 const DEMO = new URLSearchParams(location.search).has("demo");
 
+/** What the page shows until a view is chosen in the settings: the project with this name. */
+const DEFAULT_VIEW = "name:private work backlog";
+
 /** @typedef {{ id: string, name: string, type: string, position: number }} State */
 /** @typedef {{ id: string, name: string }} ProjectRef */
 /** @typedef {{ id: string, identifier: string, title: string, description: string | null, url: string, createdAt: string, startedAt: string | null, dueDate: string | null, state: State, project: ProjectRef | null }} Issue */
@@ -39,8 +42,8 @@ const store = {
 const settings = {
   get key() { return store.get("key") ?? ""; },
   get team() { return store.get("team") || "PO"; },
-  /** What to show: "" = everything in the team, "none" = issues without a project, otherwise a project id. */
-  get view() { return store.get("view") ?? ""; },
+  /** What to show: "" = everything in the team, "none" = without project, "name:<project>" or a project id. */
+  get view() { return store.get("view") ?? DEFAULT_VIEW; },
 };
 
 // ---------- Linear ----------
@@ -184,6 +187,7 @@ function normalizeIssue(i) {
 function viewFilter(view) {
   const open = { state: { type: { in: ["backlog", "unstarted", "started", "triage"] } } };
   if (view === "none") return { ...open, project: { null: true } };
+  if (view.startsWith("name:")) return { ...open, project: { name: { eqIgnoreCase: view.slice(5) } } };
   if (view) return { ...open, project: { id: { eq: view } } };
   return open;
 }
@@ -607,10 +611,21 @@ function hideToast() { $("toast").hidden = true; }
 const teamSelect = () => /** @type {HTMLSelectElement} */ ($("team-select"));
 const viewSelect = () => /** @type {HTMLSelectElement} */ ($("view-select"));
 
+/** The project a view points at, by id or by "name:<name>". @param {Board} board @param {string} view @returns {ProjectRef | null} */
+function viewProject(board, view) {
+  if (!view || view === "none") return null;
+  if (view.startsWith("name:")) {
+    const wanted = view.slice(5).toLowerCase();
+    return board.projects.find((p) => p.name.toLowerCase() === wanted) ?? null;
+  }
+  return board.projects.find((p) => p.id === view) ?? null;
+}
+
 /** Options for the view select: the whole team, no project, or one of the team's projects (from the loaded board). */
 function fillViews() {
   const projects = app.board?.projects ?? [];
-  const current = settings.view;
+  const view = settings.view;
+  const current = view === "none" ? "none" : (app.board && viewProject(app.board, view)?.id) || "";
   viewSelect().replaceChildren(
     el("option", { value: "", selected: current === "" }, ["Allt i teamet"]),
     el("option", { value: "none", selected: current === "none" }, ["Utan projekt"]),
@@ -620,21 +635,24 @@ function fillViews() {
 
 /** The project the current view is scoped to, if any. @returns {ProjectRef | null} */
 function currentProject() {
-  return app.board?.projects.find((p) => p.id === settings.view) ?? null;
+  return app.board ? viewProject(app.board, settings.view) : null;
 }
 
 /** What the page is showing, for the line under the date. @param {Board} board @param {string} view */
 function viewLabel(board, view) {
   if (view === "none") return `${board.team.name}, utan projekt`;
-  const p = board.projects.find((x) => x.id === view);
-  return p ? p.name : board.team.name;
+  const p = viewProject(board, view);
+  if (p) return p.name;
+  if (view.startsWith("name:")) return view.slice(5);
+  return board.team.name;
 }
 
 /** Client-side counterpart of viewFilter, for demo data. @param {Board} board @param {string} view */
 function applyView(board, view) {
   if (view === "none") return { ...board, issues: board.issues.filter((i) => !i.project) };
-  if (view) return { ...board, issues: board.issues.filter((i) => i.project?.id === view) };
-  return board;
+  if (!view) return board;
+  const p = viewProject(board, view);
+  return { ...board, issues: board.issues.filter((i) => !!p && i.project?.id === p.id) };
 }
 
 /** @param {TeamRef[]} teams @param {string} selected */
