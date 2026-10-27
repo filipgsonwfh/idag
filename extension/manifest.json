@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Idag (ny flik)",
+  "version": "1.0.0",
+  "description": "Öppnar startsidan Idag i varje ny flik.",
+  "icons": { "128": "icon-128.png" },
+  "chrome_url_overrides": { "newtab": "newtab.html" }
+}

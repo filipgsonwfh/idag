@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f7f6f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Idag">
+  <meta name="referrer" content="no-referrer">
+  <title>Idag</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1 id="date">&nbsp;</h1>
+    <div class="tools">
+      <button id="refresh-btn" type="button" class="icon" title="Hämta igen" aria-label="Hämta igen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/>
+        </svg>
+      </button>
+      <button id="settings-btn" type="button" class="icon" title="Inställningar" aria-label="Inställningar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.2" fill="var(--bg)"/><circle cx="15" cy="17" r="2.2" fill="var(--bg)"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section id="setup" class="card" hidden>
+      <h2>Koppla Linear</h2>
+      <p>Sidan läser team <strong>PO</strong> direkt från Linear med din personliga API-nyckel. Nyckeln sparas bara i den här webbläsaren.</p>
+      <p class="muted small">Skapa nyckeln i Linear under Settings → Security &amp; access → Personal API keys.</p>
+      <div class="row">
+        <button id="setup-btn" type="button" class="primary">Klistra in nyckel</button>
+        <a class="ghost" href="?demo">Visa demo</a>
+      </div>
+    </section>
+
+    <div id="board" hidden>
+      <section class="group">
+        <h2 class="label">Pågår</h2>
+        <ul id="progress-list" class="issues"></ul>
+      </section>
+      <section class="group">
+        <h2 class="label">Veckan <span id="todo-count" class="count"></span></h2>
+        <ul id="todo-list" class="issues"></ul>
+      </section>
+      <footer class="foot">
+        <p id="summary" class="summary"></p>
+        <p id="status" class="status"></p>
+      </footer>
+    </div>
+  </main>
+
+  <dialog id="settings">
+    <form id="settings-form" novalidate>
+      <h2>Inställningar</h2>
+      <label>Linear API-nyckel
+        <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="lin_api_…">
+      </label>
+      <label>Team
+        <input id="team-input" type="text" autocomplete="off" spellcheck="false" value="PO">
+      </label>
+      <p id="settings-error" class="muted small" role="status"></p>
+      <div class="row">
+        <button id="save-btn" type="submit" class="primary">Spara</button>
+        <button id="cancel-btn" type="button" class="ghost">Avbryt</button>
+        <button id="forget-btn" type="button" class="ghost danger">Ta bort nyckel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
