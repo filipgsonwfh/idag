@@ -37,6 +37,8 @@ const store = {
 const settings = {
   get key() { return store.get("key") ?? ""; },
   get team() { return store.get("team") || "PO"; },
+  /** Issues that belong to a project are platform work, not personal todos; hidden unless asked for. */
+  get showProjects() { return store.get("projects") === "1"; },
 };
 
 // ---------- Linear ----------
@@ -273,8 +275,13 @@ function toRow(i, now) {
 
 /** @typedef {{ state: State, rows: Row[] }} Group */
 
-/** Every open issue, grouped by workflow state. @param {Board} board @param {number} now */
-function derive(board, now) {
+/**
+ * Every open issue, grouped by workflow state. Issues in a project are left out unless showProjects.
+ * @param {Board} board @param {number} now @param {boolean} showProjects
+ */
+function derive(board, now, showProjects) {
+  const issues = showProjects ? board.issues : board.issues.filter((i) => !i.project);
+  const projectCount = board.issues.filter((i) => !!i.project).length;
   const states = board.states
     .filter((s) => OPEN_TYPES.includes(s.type))
     .sort((a, b) => OPEN_TYPES.indexOf(a.type) - OPEN_TYPES.indexOf(b.type) || a.position - b.position);
@@ -282,7 +289,7 @@ function derive(board, now) {
   const groups = states
     .map((state) => ({
       state,
-      rows: board.issues
+      rows: issues
         .filter((i) => i.state.id === state.id)
         .map((i) => toRow(i, now))
         .sort((a, b) => b.age - a.age),
@@ -290,7 +297,7 @@ function derive(board, now) {
     .filter((g) => g.rows.length > 0);
   const open = groups.reduce((n, g) => n + g.rows.length, 0);
   const stale = groups.reduce((n, g) => n + g.rows.filter((r) => r.stale).length, 0);
-  return { groups, open, stale };
+  return { groups, open, stale, projectCount };
 }
 
 /** @param {State[]} states @param {string} type @param {string} preferName */
@@ -387,7 +394,7 @@ function render() {
   if (!app.board) { renderStatus(); return; }
   renderedBoard = JSON.stringify(app.board);
 
-  const { groups, open, stale } = derive(app.board, Date.now());
+  const { groups, open, stale, projectCount } = derive(app.board, Date.now(), settings.showProjects);
 
   $("groups").replaceChildren(...(open
     ? groups.map((g) =>
@@ -401,8 +408,19 @@ function render() {
     el("span", {}, [`${open} öppna`]),
     el("span", { class: "sep" }, ["·"]),
     el("span", { class: stale ? "stale" : "" }, [`${stale} stale`]),
+    projectCount ? el("span", { class: "sep" }, ["·"]) : null,
+    projectCount
+      ? el("button", { type: "button", class: "linkish", onclick: toggleProjects }, [
+        settings.showProjects ? "dölj projektissues" : `${projectCount} i projekt, visa`,
+      ])
+      : null,
   ]));
   renderStatus();
+}
+
+function toggleProjects() {
+  store.set("projects", settings.showProjects ? "0" : "1");
+  render();
 }
 
 /** @param {Row} row */

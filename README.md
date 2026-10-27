@@ -19,6 +19,7 @@ The key lives in `localStorage` only. Nothing is stored in this repo.
 
 ## What it marks
 
+- Issues that belong to a project are platform work, not personal todos: hidden by default, "visa" in the footer shows them.
 - Stale: In Progress older than 7 days, Todo older than 14.
 - Empty description: "saknar kontext".
 - "Skapa ny" (or `c`) creates an issue in the team; a line of context is required, state defaults to Todo.
