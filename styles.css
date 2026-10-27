@@ -46,6 +46,8 @@ body:has(dialog[open]) { overflow: hidden; } /* no scrolling behind an open dial
 .top, main { width: min(680px, 100% - 40px); margin: 0 auto; }
 .top { display: flex; align-items: center; justify-content: space-between; padding-top: clamp(28px, 7vh, 88px); }
 h1 { font-size: clamp(26px, 3.4vw, 34px); font-weight: 600; letter-spacing: -0.015em; margin: 0; }
+.scope { margin: 2px 0 0; font-size: 14px; color: var(--muted); }
+.scope:empty { display: none; }
 .tools { display: flex; gap: 4px; }
 .icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); }
 .icon:hover { color: var(--ink); background: var(--pill); }
@@ -103,8 +105,7 @@ p.empty { border: 0; margin: 28px 0 0; }
 .summary, .status { margin: 0; }
 .summary { display: flex; flex-wrap: wrap; gap: 0 8px; }
 .summary .stale, .summary .nag { color: var(--amber); }
-.linkish { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
-.linkish:hover { color: var(--ink); }
+
 .status.error { color: var(--accent); }
 
 .card { margin-top: 36px; padding: 24px; border: 1px solid var(--line); border-radius: 16px; }
@@ -131,7 +132,11 @@ dialog input {
   display: block; width: 100%; margin-top: 4px; font: 16px/1.3 var(--font); color: var(--ink);
   background: transparent; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px;
 }
-dialog input:focus, dialog textarea:focus { outline: 2px solid var(--ink); outline-offset: -1px; border-color: transparent; }
+dialog select {
+  display: block; width: 100%; margin-top: 4px; font: 16px/1.3 var(--font); color: var(--ink);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px;
+}
+dialog input:focus, dialog textarea:focus, dialog select:focus { outline: 2px solid var(--ink); outline-offset: -1px; border-color: transparent; }
 dialog textarea {
   display: block; width: 100%; margin-top: 4px; font: 16px/1.4 var(--font); color: var(--ink);
   background: transparent; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; resize: vertical;

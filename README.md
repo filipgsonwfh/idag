@@ -19,7 +19,7 @@ The key lives in `localStorage` only. Nothing is stored in this repo.
 
 ## What it marks
 
-- Issues that belong to a project are platform work, not personal todos: hidden by default, "visa" in the footer shows them.
+- "Visa" in the settings picks what the page shows: everything in the team, issues without a project, or one project. "Skapa ny" creates in the selected project.
 - Stale: In Progress older than 7 days, Todo older than 14.
 - The description shows under the title, two lines; click it for the whole text. Empty description: "saknar kontext".
 - "Skapa ny" (or `c`) creates an issue in the team; a line of context is required, state defaults to Todo.

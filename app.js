@@ -18,8 +18,9 @@ const DAY_MS = 86_400_000;
 const DEMO = new URLSearchParams(location.search).has("demo");
 
 /** @typedef {{ id: string, name: string, type: string, position: number }} State */
-/** @typedef {{ id: string, identifier: string, title: string, description: string | null, url: string, createdAt: string, startedAt: string | null, dueDate: string | null, state: State, project: { name: string } | null }} Issue */
-/** @typedef {{ team: { id: string, key: string, name: string }, states: State[], issues: Issue[] }} Board */
+/** @typedef {{ id: string, name: string }} ProjectRef */
+/** @typedef {{ id: string, identifier: string, title: string, description: string | null, url: string, createdAt: string, startedAt: string | null, dueDate: string | null, state: State, project: ProjectRef | null }} Issue */
+/** @typedef {{ team: { id: string, key: string, name: string }, states: State[], projects: ProjectRef[], issues: Issue[] }} Board */
 /** @typedef {{ issue: Issue, age: number, stale: boolean }} Row */
 /** @typedef {'done' | 'backlog' | 'cancel'} Action */
 
@@ -37,23 +38,24 @@ const store = {
 const settings = {
   get key() { return store.get("key") ?? ""; },
   get team() { return store.get("team") || "PO"; },
-  /** Issues that belong to a project are platform work, not personal todos; hidden unless asked for. */
-  get showProjects() { return store.get("projects") === "1"; },
+  /** What to show: "" = everything in the team, "none" = issues without a project, otherwise a project id. */
+  get view() { return store.get("view") ?? ""; },
 };
 
 // ---------- Linear ----------
 
 const BOARD_QUERY = `
-  query Board($team: String!) {
+  query Board($team: String!, $filter: IssueFilter) {
     teams(filter: { key: { eq: $team } }, first: 1) {
       nodes {
         id key name
         states(first: 50) { nodes { id name type position } }
-        issues(first: 250, filter: { state: { type: { in: ["backlog", "unstarted", "started"] } } }) {
+        projects(first: 50) { nodes { id name } }
+        issues(first: 250, filter: $filter) {
           nodes {
             id identifier title description url createdAt startedAt dueDate
             state { id name type position }
-            project { name }
+            project { id name }
           }
         }
       }
@@ -84,6 +86,8 @@ const CREATE_MUTATION = `
 `;
 
 const VIEWER_QUERY = `query { viewer { id name displayName } }`;
+
+const TEAMS_QUERY = `query { teams(first: 50) { nodes { id key name } } }`;
 
 class LinearError extends Error {
   /** @param {string} message @param {'auth' | 'rate' | 'network' | 'graphql'} kind */
@@ -139,6 +143,12 @@ function isState(v) {
     && typeof s.type === "string" && typeof s.position === "number";
 }
 
+/** @param {unknown} v @returns {v is ProjectRef} */
+function isProject(v) {
+  const p = /** @type {any} */ (v);
+  return !!p && typeof p.id === "string" && typeof p.name === "string";
+}
+
 /** @param {unknown} v @returns {v is Issue} */
 function isIssue(v) {
   const i = /** @type {any} */ (v);
@@ -158,18 +168,29 @@ function normalizeIssue(i) {
     startedAt: typeof i.startedAt === "string" ? i.startedAt : null,
     dueDate: typeof i.dueDate === "string" ? i.dueDate : null,
     state: { id: i.state.id, name: i.state.name, type: i.state.type, position: i.state.position },
-    project: i.project && typeof i.project.name === "string" ? { name: i.project.name } : null,
+    project: isProject(i.project) ? { id: i.project.id, name: i.project.name } : null,
   };
 }
 
-/** @param {string} key @param {string} team @returns {Promise<Board>} */
-async function fetchBoard(key, team) {
-  const data = await gql(key, BOARD_QUERY, { team });
+/** Server-side filter for a view: "" = everything open, "none" = without project, otherwise a project id. @param {string} view */
+function viewFilter(view) {
+  const open = { state: { type: { in: ["backlog", "unstarted", "started", "triage"] } } };
+  if (view === "none") return { ...open, project: { null: true } };
+  if (view) return { ...open, project: { id: { eq: view } } };
+  return open;
+}
+
+/** @param {string} key @param {string} team @param {string} view @returns {Promise<Board>} */
+async function fetchBoard(key, team, view) {
+  const data = await gql(key, BOARD_QUERY, { team, filter: viewFilter(view) });
   const node = data?.teams?.nodes?.[0];
   if (!node || typeof node.id !== "string") throw new LinearError(`Hittar inget team med nyckeln ${team}.`, "graphql");
+  /** @type {unknown[]} */
+  const projectNodes = node.projects?.nodes ?? [];
   return {
     team: { id: node.id, key: String(node.key ?? team), name: String(node.name ?? team) },
     states: (node.states?.nodes ?? []).filter(isState),
+    projects: projectNodes.filter(isProject).sort((a, b) => a.name.localeCompare(b.name, "sv")),
     issues: (node.issues?.nodes ?? []).filter(isIssue).map(normalizeIssue),
   };
 }
@@ -182,7 +203,7 @@ async function moveIssue(key, issueId, stateId) {
 
 /**
  * @param {string} key
- * @param {{ teamId: string, title: string, description: string, stateId?: string }} input
+ * @param {{ teamId: string, title: string, description: string, stateId?: string, projectId?: string }} input
  * @returns {Promise<Issue>}
  */
 async function createIssue(key, input) {
@@ -190,6 +211,19 @@ async function createIssue(key, input) {
   const issue = data?.issueCreate?.issue;
   if (!data?.issueCreate?.success || !isIssue(issue)) throw new LinearError("Linear skapade inte tasken.", "graphql");
   return normalizeIssue(issue);
+}
+
+/** @typedef {{ key: string, name: string }} TeamRef */
+
+/** @param {string} key @returns {Promise<TeamRef[]>} */
+async function fetchTeams(key) {
+  const data = await gql(key, TEAMS_QUERY);
+  /** @type {unknown[]} */
+  const nodes = data?.teams?.nodes ?? [];
+  return nodes
+    .filter((t) => !!t && typeof (/** @type {any} */ (t)).key === "string" && typeof (/** @type {any} */ (t)).name === "string")
+    .map((t) => ({ key: (/** @type {any} */ (t)).key, name: (/** @type {any} */ (t)).name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "sv"));
 }
 
 /** @param {string} key @returns {Promise<string>} the viewer's display name */
@@ -222,11 +256,12 @@ function demoBoard() {
   const issue = (n, title, state, o) => ({
     id: `demo-${n}`, identifier: `PO-${n}`, title, url: "https://linear.app", state,
     createdAt: ago(o.created), startedAt: o.started != null ? ago(o.started) : null,
-    description: o.desc ?? null, dueDate: o.due ?? null, project: o.project ? { name: o.project } : null,
+    description: o.desc ?? null, dueDate: o.due ?? null, project: o.project ? { id: "p-1", name: o.project } : null,
   });
   return {
     team: { id: "demo", key: "PO", name: "Product Owner" },
     states: Object.values(S),
+    projects: [{ id: "p-1", name: "Exempelprojekt" }],
     issues: [
       issue(41, "Skriv sammanfattning av kundintervjuerna", S.progress, { created: 6, started: 2, desc: "Intervjuerna med **fem kunder** är klara, materialet ligger i [Notion](https://notion.so).\n\n- [x] transkribera\n- [ ] skriva ihop\n- [ ] skicka till teamet\n\nDone when: dokumentet är delat." }),
       issue(38, "Granska förslaget till ny prismodell", S.review, { created: 9, started: 1, desc: "Påhittat exempel.", project: "Exempelprojekt" }),
@@ -247,12 +282,12 @@ function demoBoard() {
 
 let demoCounter = 100;
 
-/** @param {string} title @param {string} description @param {State | null} state @returns {Issue} */
-function demoIssue(title, description, state) {
+/** @param {string} title @param {string} description @param {State | null} state @param {ProjectRef | null} project @returns {Issue} */
+function demoIssue(title, description, state, project) {
   const n = ++demoCounter;
   return {
     id: `demo-${n}`, identifier: `PO-${n}`, title, description, url: "https://linear.app",
-    createdAt: new Date().toISOString(), startedAt: null, dueDate: null, project: null,
+    createdAt: new Date().toISOString(), startedAt: null, dueDate: null, project,
     state: state ?? { id: "s-backlog", name: "Backlog", type: "backlog", position: 0 },
   };
 }
@@ -275,13 +310,8 @@ function toRow(i, now) {
 
 /** @typedef {{ state: State, rows: Row[] }} Group */
 
-/**
- * Every open issue, grouped by workflow state. Issues in a project are left out unless showProjects.
- * @param {Board} board @param {number} now @param {boolean} showProjects
- */
-function derive(board, now, showProjects) {
-  const issues = showProjects ? board.issues : board.issues.filter((i) => !i.project);
-  const projectCount = board.issues.filter((i) => !!i.project).length;
+/** Every open issue, grouped by workflow state. @param {Board} board @param {number} now */
+function derive(board, now) {
   const states = board.states
     .filter((s) => OPEN_TYPES.includes(s.type))
     .sort((a, b) => OPEN_TYPES.indexOf(a.type) - OPEN_TYPES.indexOf(b.type) || a.position - b.position);
@@ -289,7 +319,7 @@ function derive(board, now, showProjects) {
   const groups = states
     .map((state) => ({
       state,
-      rows: issues
+      rows: board.issues
         .filter((i) => i.state.id === state.id)
         .map((i) => toRow(i, now))
         .sort((a, b) => b.age - a.age),
@@ -297,7 +327,7 @@ function derive(board, now, showProjects) {
     .filter((g) => g.rows.length > 0);
   const open = groups.reduce((n, g) => n + g.rows.length, 0);
   const stale = groups.reduce((n, g) => n + g.rows.filter((r) => r.stale).length, 0);
-  return { groups, open, stale, projectCount };
+  return { groups, open, stale };
 }
 
 /** @param {State[]} states @param {string} type @param {string} preferName */
@@ -406,11 +436,12 @@ function render() {
   $("setup").hidden = connected;
   $("board").hidden = !connected;
   $("create-btn").hidden = !connected;
+  $("scope").textContent = connected && app.board ? viewLabel(app.board, settings.view) : "";
   if (!connected) return;
   if (!app.board) { renderStatus(); return; }
   renderedBoard = JSON.stringify(app.board);
 
-  const { groups, open, stale, projectCount } = derive(app.board, Date.now(), settings.showProjects);
+  const { groups, open, stale } = derive(app.board, Date.now());
 
   $("groups").replaceChildren(...(open
     ? groups.map((g) =>
@@ -418,25 +449,14 @@ function render() {
         el("h2", { class: "label" }, [g.state.name, el("span", { class: "count" }, [String(g.rows.length)])]),
         el("ul", { class: "issues" }, g.rows.map(renderRow)),
       ]))
-    : [el("p", { class: "empty" }, [`Inget öppet i ${app.board.team.name}.`])]));
+    : [el("p", { class: "empty" }, [`Inget öppet i ${viewLabel(app.board, settings.view)}.`])]));
 
   $("summary").replaceChildren(...compact([
     el("span", {}, [`${open} öppna`]),
     el("span", { class: "sep" }, ["·"]),
     el("span", { class: stale ? "stale" : "" }, [`${stale} stale`]),
-    projectCount ? el("span", { class: "sep" }, ["·"]) : null,
-    projectCount
-      ? el("button", { type: "button", class: "linkish", onclick: toggleProjects }, [
-        settings.showProjects ? "dölj projektissues" : `${projectCount} i projekt, visa`,
-      ])
-      : null,
   ]));
   renderStatus();
-}
-
-function toggleProjects() {
-  store.set("projects", settings.showProjects ? "0" : "1");
-  render();
 }
 
 /** @param {Row} row */
@@ -484,7 +504,7 @@ function renderStatus() {
 /** @param {{ force?: boolean }} [o] */
 async function refresh({ force = false } = {}) {
   if (DEMO) {
-    if (!app.board) { app.board = demoBoard(); app.fetchedAt = Date.now(); }
+    if (!app.board) { app.board = applyView(demoBoard(), settings.view); app.fetchedAt = Date.now(); }
     render();
     return;
   }
@@ -494,7 +514,7 @@ async function refresh({ force = false } = {}) {
   app.error = null;
   renderStatus();
   try {
-    app.board = await fetchBoard(settings.key, settings.team);
+    app.board = await fetchBoard(settings.key, settings.team, settings.view);
     app.fetchedAt = Date.now();
     saveCache();
   } catch (e) {
@@ -569,18 +589,67 @@ function hideToast() { $("toast").hidden = true; }
 
 // ---------- settings ----------
 
-function openSettings() {
+const teamSelect = () => /** @type {HTMLSelectElement} */ ($("team-select"));
+const viewSelect = () => /** @type {HTMLSelectElement} */ ($("view-select"));
+
+/** Options for the view select: the whole team, no project, or one of the team's projects (from the loaded board). */
+function fillViews() {
+  const projects = app.board?.projects ?? [];
+  const current = settings.view;
+  viewSelect().replaceChildren(
+    el("option", { value: "", selected: current === "" }, ["Allt i teamet"]),
+    el("option", { value: "none", selected: current === "none" }, ["Utan projekt"]),
+    ...projects.map((p) => el("option", { value: p.id, selected: current === p.id }, [p.name])),
+  );
+}
+
+/** The project the current view is scoped to, if any. @returns {ProjectRef | null} */
+function currentProject() {
+  return app.board?.projects.find((p) => p.id === settings.view) ?? null;
+}
+
+/** What the page is showing, for the line under the date. @param {Board} board @param {string} view */
+function viewLabel(board, view) {
+  if (view === "none") return `${board.team.name}, utan projekt`;
+  const p = board.projects.find((x) => x.id === view);
+  return p ? p.name : board.team.name;
+}
+
+/** Client-side counterpart of viewFilter, for demo data. @param {Board} board @param {string} view */
+function applyView(board, view) {
+  if (view === "none") return { ...board, issues: board.issues.filter((i) => !i.project) };
+  if (view) return { ...board, issues: board.issues.filter((i) => i.project?.id === view) };
+  return board;
+}
+
+/** @param {TeamRef[]} teams @param {string} selected */
+function fillTeams(teams, selected) {
+  teamSelect().replaceChildren(...teams.map((t) =>
+    el("option", { value: t.key, selected: t.key === selected }, [t.name === t.key ? t.key : `${t.name} (${t.key})`]),
+  ));
+}
+
+async function openSettings() {
   input("key-input").value = settings.key;
-  input("team-input").value = settings.team;
-  $("settings-error").textContent = "";
+  fillTeams([{ key: settings.team, name: settings.team }], settings.team);
+  fillViews();
+  const err = $("settings-error");
+  err.textContent = "";
   dialog().showModal();
+  if (!settings.key) return;
+  err.textContent = "Hämtar dina team…";
+  try {
+    fillTeams(await fetchTeams(settings.key), settings.team);
+    err.textContent = "";
+  } catch (e) {
+    err.textContent = e instanceof LinearError ? e.message : "Kunde inte hämta teamen.";
+  }
 }
 
 /** @param {SubmitEvent} e */
 async function saveSettings(e) {
   e.preventDefault();
   const key = input("key-input").value.trim();
-  const team = input("team-input").value.trim().toUpperCase() || "PO";
   const err = $("settings-error");
   const save = /** @type {HTMLButtonElement} */ ($("save-btn"));
   if (!key) { err.textContent = "Klistra in en API-nyckel."; return; }
@@ -588,12 +657,22 @@ async function saveSettings(e) {
   err.textContent = "Kollar nyckeln…";
   try {
     const name = await whoAmI(key);
+    const teams = await fetchTeams(key);
+    const chosen = teams.find((t) => t.key === teamSelect().value) ?? (teams.length === 1 ? teams[0] : null);
+    if (!chosen) {
+      // The stored team is not one of this key's teams: let the user pick, then save again.
+      fillTeams(teams, settings.team);
+      err.textContent = "Välj team och spara igen.";
+      return;
+    }
+    const sameTeam = chosen.key === settings.team;
     store.set("key", key);
-    store.set("team", team);
+    store.set("team", chosen.key);
+    store.set("view", sameTeam ? viewSelect().value : ""); // project ids belong to a team
     store.del("cache");
     app.board = null; app.fetchedAt = null; app.error = null;
     dialog().close();
-    showToast(`Kopplad som ${name}.`);
+    showToast(`Kopplad som ${name}, team ${chosen.name}.`);
     render();
     await refresh({ force: true });
   } catch (e2) {
@@ -652,9 +731,10 @@ async function submitCreate(e) {
   save.disabled = true;
   err.textContent = "Skapar…";
   try {
+    const project = currentProject();
     const issue = DEMO
-      ? demoIssue(title, description, state)
-      : await createIssue(settings.key, { teamId: app.board.team.id, title, description, stateId });
+      ? demoIssue(title, description, state, project)
+      : await createIssue(settings.key, { teamId: app.board.team.id, title, description, stateId, projectId: project?.id });
     app.board.issues.push(issue);
     saveCache();
     createDialog().close();

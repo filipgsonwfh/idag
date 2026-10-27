@@ -16,11 +16,14 @@
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <header class="top">
-    <h1 id="date">&nbsp;</h1>
+    <div>
+      <h1 id="date">&nbsp;</h1>
+      <p id="scope" class="scope"></p>
+    </div>
     <div class="tools">
       <button id="create-btn" type="button" class="icon new" hidden title="Skapa ny task (c)" aria-label="Skapa ny task">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -68,7 +71,10 @@
         <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="lin_api_…">
       </label>
       <label>Team
-        <input id="team-input" type="text" autocomplete="off" spellcheck="false" value="PO">
+        <select id="team-select"></select>
+      </label>
+      <label>Visa
+        <select id="view-select"></select>
       </label>
       <p id="settings-error" class="muted small" role="status"></p>
       <div class="row">
@@ -101,6 +107,6 @@
 
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script src="app.js?v=6" defer></script>
+  <script src="app.js?v=7" defer></script>
 </body>
 </html>
